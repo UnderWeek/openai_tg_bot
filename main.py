@@ -1,9 +1,10 @@
 import asyncio
+import base64
 import json
 import logging
 from collections import deque
 from pathlib import Path
-from typing import Deque, Dict
+from typing import Deque, Dict, Optional
 
 import openai
 from aiogram import Bot, Dispatcher, types
@@ -14,6 +15,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 CONFIG_PATH = Path(__file__).with_name("config.json")
 MAX_CONTEXT_PAIRS = 15
 LOG_PATH = Path("bot.log")
+MAX_IMAGE_B64_LEN = 45_000
 
 
 def load_config() -> Dict:
@@ -78,7 +80,21 @@ def log_response(user: types.User, response: str) -> None:
     logging.info("Response to %s (%s): %s", user.full_name, user.id, response)
 
 
-async def query_openai(session: SessionData, prompt: str) -> str:
+async def build_image_payload(message: types.Message) -> Optional[str]:
+    photos = message.photo or []
+    if not photos:
+        return None
+    photo = photos[-1]
+    file_info = await bot.get_file(photo.file_id)
+    file_bytes = await bot.download_file(file_info.file_path)
+    encoded = base64.b64encode(file_bytes).decode()
+    if len(encoded) > MAX_IMAGE_B64_LEN:
+        encoded = encoded[:MAX_IMAGE_B64_LEN] + "...(truncated base64)..."
+    descriptor = f"Image ({photo.width}x{photo.height}, {photo.file_size} bytes)"
+    return f"{descriptor}\n{encoded}"
+
+
+async def query_openai(session: SessionData, prompt: str, image_payload: Optional[str] = None) -> str:
     messages = [
         {"role": "system", "content": config.get("system_message", "")}
     ]
@@ -92,7 +108,15 @@ async def query_openai(session: SessionData, prompt: str) -> str:
     for pair in session.history:
         messages.append({"role": "user", "content": pair["user"]})
         messages.append({"role": "assistant", "content": pair["assistant"]})
-    messages.append({"role": "user", "content": prompt})
+    user_content = prompt.strip()
+    if image_payload:
+        if user_content:
+            user_content = f"{user_content}\n\nAttached image data:\n{image_payload}"
+        else:
+            user_content = f"Attached image data:\n{image_payload}"
+    if not user_content:
+        user_content = "Please describe the attached image."
+    messages.append({"role": "user", "content": user_content})
 
     response = openai.ChatCompletion.create(
         model=DEFAULT_MODEL,
@@ -145,16 +169,21 @@ async def handle_user_message(message: types.Message) -> None:
     if not await ensure_authorized(message):
         return
     session = get_session(message.from_user.id)
-    log_request(message.from_user, message.text)
+    prompt_text = message.text or message.caption or ""
+    image_payload = await build_image_payload(message)
+    log_entry = prompt_text or "[image only]"
+    if image_payload:
+        log_entry = f"{log_entry} + image" if log_entry else "[image only] + image"
+    log_request(message.from_user, log_entry)
     try:
-        reply = await query_openai(session, message.text)
+        reply = await query_openai(session, prompt_text, image_payload=image_payload)
     except Exception as exc:
         logging.exception("OpenAI call failed")
         await message.answer(
             "Sorry, there was an error while contacting OpenAI. Please try again later."
         )
         return
-    session.history.append({"user": message.text, "assistant": reply})
+    session.history.append({"user": prompt_text or "[image only]", "assistant": reply})
     log_response(message.from_user, reply)
     await message.answer(reply, reply_markup=build_keyboard(session))
 
