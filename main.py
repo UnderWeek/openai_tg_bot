@@ -8,6 +8,7 @@ from typing import Deque, Dict, Optional
 
 import openai
 from aiogram import Bot, Dispatcher, types
+from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -141,7 +142,7 @@ logging.basicConfig(
     handlers=[logging.FileHandler(LOG_PATH), logging.StreamHandler()],
 )
 
-bot = Bot(token=config["telegram_token"], parse_mode=types.ParseMode.HTML)
+bot = Bot(token=config["telegram_token"], parse_mode=ParseMode.HTML)
 dp = Dispatcher(storage=MemoryStorage())
 
 
