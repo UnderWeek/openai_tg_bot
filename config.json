@@ -1,0 +1,22 @@
+{
+  "telegram_token": "YOUR_TELEGRAM_BOT_TOKEN",
+  "openai_api_key": "YOUR_OPENAI_API_KEY",
+  "user_id": 123456789,
+  "default_model": "gpt-4o-mini",
+  "internet_access": false,
+  "system_message": "You are a privacy-aware assistant that always respects the configured settings.",
+  "models": [
+    {
+      "name": "gpt-4o-mini",
+      "input_price": 0.015,
+      "output_price": 0.03,
+      "description": "Fast, creative responses for everyday prompts."
+    },
+    {
+      "name": "gpt-4.1",
+      "input_price": 0.03,
+      "output_price": 0.06,
+      "description": "Higher-fidelity reasoning for complex requests."
+    }
+  ]
+}
